@@ -16,8 +16,14 @@ export class AuthUserDto {
 }
 
 export class AuthResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: 'Short-lived bearer token' })
   accessToken!: string;
+
+  @ApiProperty({ description: 'Opaque token, rotated on every use' })
+  refreshToken!: string;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  refreshTokenExpiresAt!: Date;
 
   @ApiProperty({ type: AuthUserDto })
   user!: AuthUserDto;

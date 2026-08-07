@@ -6,6 +6,7 @@ export interface AppConfiguration {
   jwt: {
     secret: string;
     expiresIn: string;
+    refreshTokenDays: number;
   };
   redis: {
     host: string;
@@ -28,7 +29,8 @@ export const configuration = (): AppConfiguration => ({
   port: Number(process.env.PORT ?? 3000),
   jwt: {
     secret: process.env.JWT_SECRET as string,
-    expiresIn: process.env.JWT_EXPIRES_IN ?? '1h',
+    expiresIn: process.env.JWT_EXPIRES_IN ?? '15m',
+    refreshTokenDays: Number(process.env.REFRESH_TOKEN_DAYS ?? 30),
   },
   redis: {
     host: process.env.REDIS_HOST ?? 'localhost',

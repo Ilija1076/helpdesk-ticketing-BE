@@ -6,6 +6,7 @@ import { AuthenticatedUser } from '../common/types/authenticated-user';
 import { AuthService } from './auth.service';
 import { AuthResponseDto, AuthUserDto } from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
+import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDto } from './dto/register.dto';
 
 @ApiTags('auth')
@@ -28,6 +29,24 @@ export class AuthController {
   @ApiResponse({ status: HttpStatus.OK, type: AuthResponseDto })
   login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
     return this.authService.login(dto);
+  }
+
+  @Public()
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Rotate a refresh token for a fresh token pair' })
+  @ApiResponse({ status: HttpStatus.OK, type: AuthResponseDto })
+  refresh(@Body() dto: RefreshDto): Promise<AuthResponseDto> {
+    return this.authService.refresh(dto.refreshToken);
+  }
+
+  @Public()
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Revoke a refresh token' })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT })
+  logout(@Body() dto: RefreshDto): Promise<void> {
+    return this.authService.logout(dto.refreshToken);
   }
 
   @Get('me')
