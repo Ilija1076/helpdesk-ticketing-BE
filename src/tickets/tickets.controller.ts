@@ -11,11 +11,13 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
+import { ApiPaginatedResponse } from '../common/dto/api-paginated-response.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { AuthenticatedUser } from '../common/types/authenticated-user';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { QueryTicketsDto } from './dto/query-tickets.dto';
+import { TicketStatsDto } from './dto/ticket-stats.dto';
 import { TicketDto } from './dto/ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { toTicketDto } from './ticket.mapper';
@@ -39,7 +41,7 @@ export class TicketsController {
 
   @Get()
   @ApiOperation({ summary: 'List tickets; clients only ever see their own' })
-  @ApiOkResponse({ type: TicketDto, isArray: true })
+  @ApiPaginatedResponse(TicketDto)
   async findMany(@Query() query: QueryTicketsDto, @CurrentUser() user: AuthenticatedUser) {
     const result = await this.ticketsService.findMany(query, user);
     return { data: result.data.map(toTicketDto), meta: result.meta };
@@ -48,7 +50,8 @@ export class TicketsController {
   @Get('stats')
   @Roles(Role.AGENT)
   @ApiOperation({ summary: 'Aggregate counts for the agent dashboard' })
-  stats() {
+  @ApiOkResponse({ type: TicketStatsDto })
+  stats(): Promise<TicketStatsDto> {
     return this.ticketsService.stats();
   }
 

@@ -8,7 +8,8 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiPaginatedResponse } from '../common/dto/api-paginated-response.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user';
@@ -36,7 +37,7 @@ export class CommentsController {
 
   @Get()
   @ApiOperation({ summary: 'List comments; internal notes are hidden from clients' })
-  @ApiOkResponse({ type: CommentDto, isArray: true })
+  @ApiPaginatedResponse(CommentDto)
   async findMany(
     @Param('ticketId', ParseUUIDPipe) ticketId: string,
     @Query() query: PaginationQueryDto,
