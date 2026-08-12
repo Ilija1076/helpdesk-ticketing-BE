@@ -5,7 +5,8 @@ A helpdesk backend built around one thing that is genuinely hard: **SLA deadline
 I spent a good while maintaining an osTicket installation in PHP. This is the answer to "how would I design that today, from scratch" — a NestJS + PostgreSQL API where the interesting part is not the CRUD but the SLA clock.
 
 - **API docs:** `http://localhost:3000/docs` once running
-- **Stack:** NestJS 11, PostgreSQL 16, Prisma, Redis + BullMQ, JWT auth, Jest
+- **Dashboard:** `http://localhost:3003` — Grafana, provisioned from this repo
+- **Stack:** NestJS 11, PostgreSQL 16, Prisma, Redis + BullMQ, JWT auth, Prometheus + Grafana, Jest
 - **Frontend:** lives in a separate repository
 
 ---
@@ -55,6 +56,45 @@ WHERE status NOT IN ('RESOLVED','CLOSED')
 The alternative — recomputing the calendar per row on every scan — would turn a cheap indexed range query into a full scan plus CPU-bound date maths. Denormalising the deadline is what keeps this O(breaches) instead of O(tickets).
 
 One honest trade-off: `resolutionBreachedAt` stores the time the breach was *detected*, not the exact instant it occurred. With a 60-second scan interval those differ by under a minute, and the precise deadline is already on the row as `resolutionDueAt`. Setting each row to its own due date would need a per-row update instead of one statement, which was not worth it.
+
+---
+
+## Observability
+
+`docker compose up` also brings up Prometheus and Grafana, with a dashboard that is provisioned from files in this repository rather than clicked together in the UI.
+
+| | |
+| --- | --- |
+| Grafana | `http://localhost:3003` — anonymous viewer access, dashboard loads as the home page |
+| Prometheus | `http://localhost:9090` |
+| Scrape target | `http://api:3000/api/metrics` on the compose network |
+
+### What is measured
+
+| Metric | Type | Where it comes from |
+| --- | --- | --- |
+| `helpdesk_sla_breaches_total{clock,priority}` | counter | incremented by the breach scanner as it flags tickets |
+| `helpdesk_sla_scan_duration_seconds` | histogram | wraps one scan |
+| `helpdesk_tickets{status,priority}` | gauge | a `groupBy` run at scrape time |
+| `helpdesk_queue_jobs{queue,state}` | gauge | `queue.getJobCounts()` at scrape time |
+| `helpdesk_http_duration_seconds{method,route,status}` | histogram | a global interceptor |
+| `process_*`, `nodejs_*` | various | `collectDefaultMetrics()` — event loop lag, GC, heap |
+
+Three decisions in there are worth explaining.
+
+**The gauges are filled inside a `collect()` callback**, not on a timer. A gauge refreshed on its own schedule reports whatever it last saw, so the number you read is always a little stale and you cannot tell by how much. Filling it during the scrape means the value is exactly as old as the scrape. The cost is one `groupBy` every 15 seconds, which at this size is nothing; at a size where it stops being nothing, the answer is a summary table, not a faster timer.
+
+**The route label is the Express route template**, `/api/tickets/:id` rather than `/api/tickets/9f3c…`. Labelling with the raw path would mint a new time series per ticket id and eventually take Prometheus down. This is the single easiest way to break a metrics setup and it does not show up until production.
+
+**The breach counter carries a `priority` label**, which is why the scanner issues one statement per priority instead of one overall. The statements are still indexed range queries inside a single transaction, and "which priorities are we failing" is the question a dashboard is actually asked.
+
+The counter counts *newly flagged* breaches, not tickets currently in breach — it never goes down, which is what makes `increase()` and `rate()` meaningful over it. For "how many are broken right now", the ticket gauge answers that.
+
+### Dashboard
+
+Provisioning lives in [`docker/grafana/`](docker/grafana/): the datasource, the dashboard provider, and the dashboard itself as [committed JSON](docker/grafana/dashboards/helpdesk.json). A dashboard built by clicking through the Grafana UI lives in the Grafana volume and disappears with `docker compose down -v`; this one is in git and comes back for anyone who clones the repository.
+
+Panels, in order: breaches per hour by priority, tickets by status, queue depth and failed jobs, p95 request duration by route, and SLA scan duration against Node event loop lag.
 
 ---
 
@@ -172,7 +212,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Migrations are applied by the entrypoint and demo data is seeded on first boot. Then open `http://localhost:3000/docs`.
+Migrations are applied by the entrypoint and demo data is seeded on first boot. Then open `http://localhost:3000/docs` for the API and `http://localhost:3003` for the dashboard.
 
 Seeded logins (password `password123`):
 
@@ -203,6 +243,8 @@ npm test          # unit: the SLA calendar
 npm run test:e2e  # end to end: needs postgres and redis running
 ```
 
+`test:e2e` migrates the test database first, so a clean checkout only needs `docker compose up -d postgres redis` before it runs. It targets `TEST_DATABASE_URL`, which the compose stack creates as a separate `helpdesk_test` database — the e2e suite truncates between specs and has no business doing that to your development data.
+
 The split is intentional:
 
 - **Unit tests** cover the business calendar — weekends, holidays, window boundaries, an exactly-consumed day, a 24-hour window, and the March DST transition. No database, no mocks, no Nest test module.
@@ -226,6 +268,8 @@ Both run in CI on every push, against real Postgres and Redis service containers
 | `BUSINESS_WORKDAYS` | `1,2,3,4,5` | ISO weekdays, 1 = Monday |
 | `BUSINESS_HOLIDAYS` | empty | comma-separated `YYYY-MM-DD` |
 | `SLA_SCAN_INTERVAL_MS` | `60000` | breach scanner interval |
+| `TEST_DATABASE_URL` | — | used by the e2e suite instead of `DATABASE_URL` |
+| `GRAFANA_ADMIN_PASSWORD` | `admin` | compose only |
 
 Environment is validated with Joi at boot, so a malformed calendar or a short JWT secret fails immediately rather than at the first request.
 
