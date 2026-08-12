@@ -10,6 +10,7 @@ import { CommentsModule } from './comments/comments.module';
 import { AppConfiguration, configuration } from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
 import { HealthModule } from './health/health.module';
+import { MetricsModule } from './metrics/metrics.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SlaModule } from './sla/sla.module';
 import { TicketsModule } from './tickets/tickets.module';
@@ -33,6 +34,7 @@ import { UsersModule } from './users/users.module';
       }),
     }),
     PrismaModule,
+    MetricsModule,
     AuthModule,
     UsersModule,
     SlaModule,
